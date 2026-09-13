@@ -9,7 +9,17 @@ ARG CUDA_ARCH="8.7"
 ENV CUDA_ARCH=${CUDA_ARCH}
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
-# 1. Установка Livox-SDK2 в систему
+# 1. Установка всех необходимых системных библиотек ROS2 для Livox и FAST_LIO
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-pcl-conversions \
+    ros-${ROS_DISTRO}-rosidl-default-generators \
+    ros-${ROS_DISTRO}-rosidl-default-runtime \
+    ros-${ROS_DISTRO}-tf2-eigen \
+    ros-${ROS_DISTRO}-tf2-ros \
+    ros-${ROS_DISTRO}-tf2-geometry-msgs \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Установка Livox-SDK2 в систему
 RUN cd /tmp && \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && \
@@ -19,30 +29,25 @@ RUN cd /tmp && \
 
 WORKDIR /ros2_ws/src
 
-# 2. Клонирование FAST_LIO (ветка ROS2)
+# 3. Клонирование FAST_LIO (ветка ROS2)
 RUN git clone --recursive -b ROS2 https://github.com/hku-mars/FAST_LIO.git || \
     git clone --recursive https://github.com/hku-mars/FAST_LIO.git
 
-# 3. Клонирование и подготовка livox_ros_driver2
+# 4. Клонирование и переключение livox_ros_driver2 на ROS2
 RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
     cd livox_ros_driver2 && \
     cp package_ROS2.xml package.xml
 
 WORKDIR /ros2_ws
 
-# 4. Установка всех системных и ROS2 зависимостей
+# 5. Сборка всего workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
-    apt-get update && \
-    rosdep install --from-paths src --ignore-src -r -y && \
-    rm -rf /var/lib/apt/lists/*
-
-# 5. Последовательная сборка: сначала driver2 (создает custom_msg), затем весь workspace
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
-    colcon build --symlink-install --packages-select livox_ros_driver2 \
-    --cmake-args -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS2 -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" && \
-    . /ros2_ws/install/setup.sh && \
     colcon build --symlink-install \
-    --cmake-args -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS2 -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}"
+    --cmake-args \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DROS_EDITION=ROS2 \
+      -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
+      --no-warn-unused-cli
 
 # Настройка окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
