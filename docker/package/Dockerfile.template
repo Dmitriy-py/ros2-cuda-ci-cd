@@ -9,9 +9,16 @@ ARG CUDA_ARCH="8.7"
 ENV CUDA_ARCH=${CUDA_ARCH}
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
-# 1. Установка ВСЕХ возможных системных и ROS2 библиотек для PCL, Livox и FAST_LIO
+# 1. Установка всех необходимых системных и ROS2 пакетов
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
     libapr1-dev \
+    libboost-all-dev \
+    libeigen3-dev \
+    libfmt-dev \
+    libpcl-dev \
     ros-${ROS_DISTRO}-pcl-conversions \
     ros-${ROS_DISTRO}-pcl-ros \
     ros-${ROS_DISTRO}-perception-pcl \
@@ -22,11 +29,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-tf2-geometry-msgs \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Установка Livox-SDK2 в систему
+# 2. Сборка Livox-SDK2 и копирование в системные каталоги (/usr/include и /usr/lib)
 RUN cd /tmp && \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && \
-    cmake .. && make -j$(nproc) && make install && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+    make -j$(nproc) && make install && \
+    cp -r /usr/local/include/* /usr/include/ 2>/dev/null || true && \
+    cp -r /usr/local/lib*/* /usr/lib/ 2>/dev/null || true && \
     ldconfig && \
     rm -rf /tmp/Livox-SDK2
 
@@ -36,22 +46,22 @@ WORKDIR /ros2_ws/src
 RUN git clone --recursive -b ROS2 https://github.com/hku-mars/FAST_LIO.git || \
     git clone --recursive https://github.com/hku-mars/FAST_LIO.git
 
-# 4. Клонирование и подготовка livox_ros_driver2
+# 4. Клонирование и настройка livox_ros_driver2 под ROS2
 RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
     cd livox_ros_driver2 && \
     cp package_ROS2.xml package.xml
 
 WORKDIR /ros2_ws
 
-# 5. Сборка пакетов с подробным выводом логов (console_direct+)
+# 5. Сборка workspace с автоматической распечаткой логов при сбое
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
-    --event-handlers console_direct+ \
     --cmake-args \
       -DCMAKE_BUILD_TYPE=Release \
       -DROS_EDITION=ROS2 \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
-      --no-warn-unused-cli
+      --no-warn-unused-cli || \
+    (echo "=== ERROR DETECTED: PRINTING COMPILATION LOGS ===" && cat log/latest_build/*/stdout_stderr.log 2>/dev/null && exit 1)
 
 # Настройка окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
