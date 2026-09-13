@@ -3,52 +3,46 @@ FROM ${BASE_IMAGE}
 
 ARG REPO_URL
 ARG REPO_BRANCH="ROS2"
-ARG PACKAGE_NAME
+ARG PACKAGE_NAME="FAST_LIO"
 ARG CUDA_ARCH="8.7"
 
 ENV CUDA_ARCH=${CUDA_ARCH}
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
-# 1. Установка Livox SDK2 в системные каталоги (собираем во временной папке /tmp)
-RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; then \
-    cd /tmp && \
+# 1. Установка Livox-SDK2 в систему
+RUN cd /tmp && \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && \
     cmake .. && make -j$(nproc) && make install && \
-    rm -rf /tmp/Livox-SDK2 ; \
-    fi
+    ldconfig && \
+    rm -rf /tmp/Livox-SDK2
 
 WORKDIR /ros2_ws/src
 
-# 2. Клонирование основного репозитория (FAST_LIO)
-RUN git clone --recursive ${REPO_URL} pkg_repo && \
-    cd pkg_repo && \
-    (git checkout ROS2 || git checkout ros2 || git checkout main || true)
+# 2. Клонирование FAST_LIO (ветка ROS2)
+RUN git clone --recursive -b ROS2 https://github.com/hku-mars/FAST_LIO.git || \
+    git clone --recursive https://github.com/hku-mars/FAST_LIO.git
 
-# 3. Клонирование и ПРАВИЛЬНАЯ настройка livox_ros_driver2 под ROS2
-RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; then \
-    git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
+# 3. Клонирование и подготовка livox_ros_driver2
+RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
     cd livox_ros_driver2 && \
-    cp package_ROS2.xml package.xml && \
-    cp CMakeLists_page.txt CMakeLists.txt ; \
-    fi
+    cp package_ROS2.xml package.xml
 
 WORKDIR /ros2_ws
 
-# 4. Установка ROS2 зависимостей
+# 4. Установка всех системных и ROS2 зависимостей
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     rm -rf /var/lib/apt/lists/*
 
-# 5. Сборка workspace через colcon
+# 5. Последовательная сборка: сначала driver2 (создает custom_msg), затем весь workspace
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    colcon build --symlink-install --packages-select livox_ros_driver2 \
+    --cmake-args -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS2 -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" && \
+    . /ros2_ws/install/setup.sh && \
     colcon build --symlink-install \
-    --cmake-args \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DROS_EDITION=ROS2 \
-      -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
-      --no-warn-unused-cli
+    --cmake-args -DCMAKE_BUILD_TYPE=Release -DROS_EDITION=ROS2 -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}"
 
 # Настройка окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
