@@ -2,7 +2,7 @@ ARG BASE_IMAGE=ghcr.io/dmitriy-py/ros2-cuda-base:x86_64
 FROM ${BASE_IMAGE}
 
 ARG REPO_URL
-ARG REPO_BRANCH="main"
+ARG REPO_BRANCH="ROS2"
 ARG PACKAGE_NAME
 ARG CUDA_ARCH="8.7"
 
@@ -11,28 +11,29 @@ ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
 WORKDIR /ros2_ws/src
 
-# Безопасное клонирование: склонировать репозиторий и переключиться на ветку, если она существует
-RUN git clone --recursive ${REPO_URL} && \
-    REPO_DIR=$(ls -d */ | head -n 1) && \
-    cd ${REPO_DIR} && \
-    (git checkout ${REPO_BRANCH} || true)
+# 1. Клонирование основного репозитория (с переключением на ветку ROS2 / ros2 / main)
+RUN git clone --recursive ${REPO_URL} pkg_repo && \
+    cd pkg_repo && \
+    (git checkout ROS2 || git checkout ros2 || git checkout main || true)
 
-# Установка специфичных зависимостей для FAST-LIO2 / FAST-LIVO2 (Livox SDK2)
+# 2. Установка зависимостей Livox SDK2 и Driver для FAST_LIO / FAST-LIVO2
 RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; then \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && cmake .. && make -j$(nproc) && make install && cd ../.. && \
-    git clone https://github.com/Livox-SDK/livox_ros_driver2.git ; \
+    git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
+    cd livox_ros_driver2 && \
+    cp package_ROS2.xml package.xml ; \
     fi
 
 WORKDIR /ros2_ws
 
-# Установка зависимостей через rosdep
+# 3. Автоматическая установка всех недостающих ROS2 зависимостей
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Сборка workspace с передачей параметров CUDA
+# 4. Сборка workspace через colcon
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
     --cmake-args \
@@ -40,7 +41,7 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
       --no-warn-unused-cli
 
-# Настройка сорсинга окружения
+# Настройка окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
     echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
 
