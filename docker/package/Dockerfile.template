@@ -1,0 +1,40 @@
+ARG BASE_IMAGE=ghcr.io/your-org/ros2-cuda-base:x86_64
+FROM ${BASE_IMAGE}
+
+ARG REPO_URL
+ARG REPO_BRANCH=main
+ARG PACKAGE_NAME
+ARG CUDA_ARCH="8.7"
+
+ENV CUDA_ARCH=${CUDA_ARCH}
+ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
+
+WORKDIR /ros2_ws/src
+
+RUN git clone --recursive -b ${REPO_BRANCH} ${REPO_URL}
+
+RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; then \
+    git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
+    cd Livox-SDK2 && mkdir build && cd build && cmake .. && make -j$(nproc) && make install && cd ../.. && \
+    git clone https://github.com/Livox-SDK/livox_ros_driver2.git ; \
+    fi
+
+WORKDIR /ros2_ws
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    apt-get update && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    colcon build --symlink-install \
+    --cmake-args \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
+      --no-warn-unused-cli
+
+RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
+    echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
+
+ENTRYPOINT ["/bin/bash", "-c", "source /ros2_ws/install/setup.bash && exec \"$@\"", "--"]
+CMD ["bash"]
