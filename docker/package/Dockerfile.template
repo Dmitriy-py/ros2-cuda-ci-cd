@@ -1,6 +1,7 @@
 ARG BASE_IMAGE=ghcr.io/dmitriy-py/ros2-cuda-base:x86_64
 FROM ${BASE_IMAGE}
 
+ENV ROS_DISTRO=humble
 ARG REPO_URL
 ARG REPO_BRANCH="ROS2"
 ARG PACKAGE_NAME="FAST_LIO"
@@ -9,59 +10,42 @@ ARG CUDA_ARCH="8.7"
 ENV CUDA_ARCH=${CUDA_ARCH}
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
-# 1. Установка всех необходимых системных и ROS2 пакетов
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    git \
-    libapr1-dev \
-    libboost-all-dev \
-    libeigen3-dev \
-    libfmt-dev \
-    libpcl-dev \
-    ros-${ROS_DISTRO}-pcl-conversions \
-    ros-${ROS_DISTRO}-pcl-ros \
-    ros-${ROS_DISTRO}-perception-pcl \
-    ros-${ROS_DISTRO}-rosidl-default-generators \
-    ros-${ROS_DISTRO}-rosidl-default-runtime \
-    ros-${ROS_DISTRO}-tf2-eigen \
-    ros-${ROS_DISTRO}-tf2-ros \
-    ros-${ROS_DISTRO}-tf2-geometry-msgs \
-    && rm -rf /var/lib/apt/lists/*
-
-# 2. Сборка Livox-SDK2 и копирование в системные каталоги (/usr/include и /usr/lib)
+# 1. Установка Livox-SDK2 в систему
 RUN cd /tmp && \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
-    make -j$(nproc) && make install && \
-    cp -r /usr/local/include/* /usr/include/ 2>/dev/null || true && \
-    cp -r /usr/local/lib*/* /usr/lib/ 2>/dev/null || true && \
+    cmake .. && make -j$(nproc) && make install && \
     ldconfig && \
     rm -rf /tmp/Livox-SDK2
 
 WORKDIR /ros2_ws/src
 
-# 3. Клонирование FAST_LIO (ветка ROS2)
+# 2. Клонирование FAST_LIO
 RUN git clone --recursive -b ROS2 https://github.com/hku-mars/FAST_LIO.git || \
     git clone --recursive https://github.com/hku-mars/FAST_LIO.git
 
-# 4. Клонирование и настройка livox_ros_driver2 под ROS2
+# 3. Клонирование и переключение livox_ros_driver2 на ROS2
 RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
     cd livox_ros_driver2 && \
     cp package_ROS2.xml package.xml
 
 WORKDIR /ros2_ws
 
-# 5. Сборка workspace с автоматической распечаткой логов при сбое
+# 4. Автоматическое определение и установка ВСЕХ зависимостей через rosdep
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+    apt-get update && \
+    rosdep update && \
+    rosdep install --from-paths src --ignore-src -r -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# 5. Сборка пакетов через colcon
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
     --cmake-args \
       -DCMAKE_BUILD_TYPE=Release \
       -DROS_EDITION=ROS2 \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
-      --no-warn-unused-cli || \
-    (echo "=== ERROR DETECTED: PRINTING COMPILATION LOGS ===" && cat log/latest_build/*/stdout_stderr.log 2>/dev/null && exit 1)
+      --no-warn-unused-cli
 
 # Настройка окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
