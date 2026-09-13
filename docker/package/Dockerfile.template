@@ -9,9 +9,12 @@ ARG CUDA_ARCH="8.7"
 ENV CUDA_ARCH=${CUDA_ARCH}
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
-# 1. Установка всех необходимых системных библиотек ROS2 для Livox и FAST_LIO
+# 1. Установка ВСЕХ возможных системных и ROS2 библиотек для PCL, Livox и FAST_LIO
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libapr1-dev \
     ros-${ROS_DISTRO}-pcl-conversions \
+    ros-${ROS_DISTRO}-pcl-ros \
+    ros-${ROS_DISTRO}-perception-pcl \
     ros-${ROS_DISTRO}-rosidl-default-generators \
     ros-${ROS_DISTRO}-rosidl-default-runtime \
     ros-${ROS_DISTRO}-tf2-eigen \
@@ -33,16 +36,17 @@ WORKDIR /ros2_ws/src
 RUN git clone --recursive -b ROS2 https://github.com/hku-mars/FAST_LIO.git || \
     git clone --recursive https://github.com/hku-mars/FAST_LIO.git
 
-# 4. Клонирование и переключение livox_ros_driver2 на ROS2
+# 4. Клонирование и подготовка livox_ros_driver2
 RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
     cd livox_ros_driver2 && \
     cp package_ROS2.xml package.xml
 
 WORKDIR /ros2_ws
 
-# 5. Сборка всего workspace
+# 5. Сборка пакетов с подробным выводом логов (console_direct+)
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
+    --event-handlers console_direct+ \
     --cmake-args \
       -DCMAKE_BUILD_TYPE=Release \
       -DROS_EDITION=ROS2 \
