@@ -11,12 +11,12 @@ ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
 WORKDIR /ros2_ws/src
 
-# 1. Клонирование основного репозитория (с переключением на ветку ROS2 / ros2 / main)
+# 1. Клонирование основного репозитория (с автоматическим выбором ветки ROS2)
 RUN git clone --recursive ${REPO_URL} pkg_repo && \
     cd pkg_repo && \
     (git checkout ROS2 || git checkout ros2 || git checkout main || true)
 
-# 2. Установка зависимостей Livox SDK2 и Driver для FAST_LIO / FAST-LIVO2
+# 2. Установка Livox SDK2 и правильная подготовка livox_ros_driver2
 RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; then \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && cmake .. && make -j$(nproc) && make install && cd ../.. && \
@@ -27,21 +27,22 @@ RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; t
 
 WORKDIR /ros2_ws
 
-# 3. Автоматическая установка всех недостающих ROS2 зависимостей
+# 3. Автоматическая установка зависимостей ROS2
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     rm -rf /var/lib/apt/lists/*
 
-# 4. Сборка workspace через colcon
+# 4. Сборка workspace с флагами ROS_EDITION=ROS2 и CMAKE_CUDA_ARCHITECTURES
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
     --cmake-args \
       -DCMAKE_BUILD_TYPE=Release \
+      -DROS_EDITION=ROS2 \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
       --no-warn-unused-cli
 
-# Настройка окружения
+# Настройка сорсинга окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
     echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
 
