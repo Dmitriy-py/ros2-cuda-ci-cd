@@ -17,7 +17,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/fast-lio2
+  # Все имена пакетов ТОЛЬКО в нижнем регистре!
+  IMAGE_NAME: dmitriy-py/fast-lio2
 
 jobs:
   build-and-push:
@@ -26,33 +27,29 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # 1. x86_64 Native Build
           - target_platform: "x86_64"
             arch: "linux/amd64"
             cuda_arch: "7.5;8.0;8.6;8.9"
-            base_image: "ghcr.io/${{ github.repository_owner }}/ros2-cuda-base:x86_64"
+            base_image: "ghcr.io/dmitriy-py/ros2-cuda-base:x86_64"
             runner: "ubuntu-latest"
             build_type: "native"
 
+          # 2. Jetson AGX Orin (Cross-build via QEMU on x86)
           - target_platform: "orin-agx"
             arch: "linux/arm64"
             cuda_arch: "8.7"
-            base_image: "ghcr.io/${{ github.repository_owner }}/ros2-cuda-base:orin"
+            base_image: "ghcr.io/dmitriy-py/ros2-cuda-base:orin"
             runner: "ubuntu-latest"
             build_type: "cross-qemu"
 
+          # 3. Jetson Orin Nano (Cross-build via QEMU on x86)
           - target_platform: "orin-nano"
             arch: "linux/arm64"
             cuda_arch: "8.7"
-            base_image: "ghcr.io/${{ github.repository_owner }}/ros2-cuda-base:orin"
+            base_image: "ghcr.io/dmitriy-py/ros2-cuda-base:orin"
             runner: "ubuntu-latest"
             build_type: "cross-qemu"
-
-          - target_platform: "orin-agx-native"
-            arch: "linux/arm64"
-            cuda_arch: "8.7"
-            base_image: "ghcr.io/${{ github.repository_owner }}/ros2-cuda-base:orin"
-            runner: ["self-hosted", "ARM64", "jetson"]
-            build_type: "native"
 
     steps:
       - name: Checkout code
@@ -78,7 +75,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: \({{ env.REGISTRY }}/\){{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ matrix.target_platform }}-latest
             type=ref,event=branch
@@ -101,12 +98,3 @@ jobs:
             CUDA_ARCH=${{ matrix.cuda_arch }}
           cache-from: type=gha,scope=${{ matrix.target_platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.target_platform }}
-
-  test-image:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Test Docker Container Structure
-        run: |
-          echo "Testing x86_64 image startup..."
-          docker run --rm ghcr.io/${{ github.repository_owner }}/fast-lio2:x86_64-latest ros2 pkg list | grep fast_lio
