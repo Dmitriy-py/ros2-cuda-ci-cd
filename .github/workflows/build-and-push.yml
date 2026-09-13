@@ -18,7 +18,6 @@ on:
 env:
   REGISTRY: ghcr.io
 
-
 jobs:
   build-and-push:
     runs-on: ${{ matrix.runner }}
@@ -26,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-
+          # 1. x86_64 Native Build
           - target_platform: "x86_64"
             arch: "linux/amd64"
             cuda_arch: "7.5;8.0;8.6;8.9"
@@ -34,7 +33,7 @@ jobs:
             runner: "ubuntu-latest"
             build_type: "native"
 
-
+          # 2. Jetson AGX Orin (Cross-build via QEMU on x86)
           - target_platform: "orin-agx"
             arch: "linux/arm64"
             cuda_arch: "8.7"
@@ -42,7 +41,7 @@ jobs:
             runner: "ubuntu-latest"
             build_type: "cross-qemu"
 
-
+          # 3. Jetson Orin Nano (Cross-build via QEMU on x86)
           - target_platform: "orin-nano"
             arch: "linux/arm64"
             cuda_arch: "8.7"
@@ -82,7 +81,6 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
             REPO_URL=${{ github.event.inputs.package_repo || 'https://github.com/hku-mars/FAST_LIO.git' }}
-            REPO_BRANCH=ros2
             PACKAGE_NAME=${{ github.event.inputs.package_name || 'FAST_LIO' }}
             CUDA_ARCH=${{ matrix.cuda_arch }}
           cache-from: type=gha,scope=${{ matrix.target_platform }}

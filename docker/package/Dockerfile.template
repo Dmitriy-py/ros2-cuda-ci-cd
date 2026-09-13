@@ -1,8 +1,8 @@
-ARG BASE_IMAGE=ghcr.io/your-org/ros2-cuda-base:x86_64
+ARG BASE_IMAGE=ghcr.io/dmitriy-py/ros2-cuda-base:x86_64
 FROM ${BASE_IMAGE}
 
 ARG REPO_URL
-ARG REPO_BRANCH=main
+ARG REPO_BRANCH="main"
 ARG PACKAGE_NAME
 ARG CUDA_ARCH="8.7"
 
@@ -11,8 +11,13 @@ ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
 WORKDIR /ros2_ws/src
 
-RUN git clone --recursive -b ${REPO_BRANCH} ${REPO_URL}
+# Безопасное клонирование: склонировать репозиторий и переключиться на ветку, если она существует
+RUN git clone --recursive ${REPO_URL} && \
+    REPO_DIR=$(ls -d */ | head -n 1) && \
+    cd ${REPO_DIR} && \
+    (git checkout ${REPO_BRANCH} || true)
 
+# Установка специфичных зависимостей для FAST-LIO2 / FAST-LIVO2 (Livox SDK2)
 RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; then \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && cmake .. && make -j$(nproc) && make install && cd ../.. && \
@@ -21,11 +26,13 @@ RUN if [ "$PACKAGE_NAME" = "FAST_LIO" ] || [ "$PACKAGE_NAME" = "FAST-LIVO2" ]; t
 
 WORKDIR /ros2_ws
 
+# Установка зависимостей через rosdep
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     apt-get update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     rm -rf /var/lib/apt/lists/*
 
+# Сборка workspace с передачей параметров CUDA
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
     --cmake-args \
@@ -33,6 +40,7 @@ RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
       --no-warn-unused-cli
 
+# Настройка сорсинга окружения
 RUN echo "source /opt/ros/${ROS_DISTRO}/setup.bash" >> ~/.bashrc && \
     echo "source /ros2_ws/install/setup.bash" >> ~/.bashrc
 
