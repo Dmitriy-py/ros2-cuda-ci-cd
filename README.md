@@ -5,7 +5,8 @@
 ![CUDA Toolkit](https://img.shields.io/badge/CUDA-12.2%20%2F%2012.x-green)
 ![NVIDIA JetPack](https://img.shields.io/badge/NVIDIA%20JetPack-6.2.2%20(L4T%20R36.5.0)-76B900)
 
-**Автор проекта / DevOps:** Дмитрий Климов 
+**Автор проекта / DevOps:** ` Дмитрий Климов `
+
 **Репозиторий проекта:** [Dmitriy-py/ros2-cuda-ci-cd](https://github.com/Dmitriy-py/ros2-cuda-ci-cd)  
 **Реестр Docker-образов:** [GitHub Packages (ghcr.io)](https://github.com/Dmitriy-py?tab=packages)
 
