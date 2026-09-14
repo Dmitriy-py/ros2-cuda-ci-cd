@@ -10,40 +10,43 @@ ARG CUDA_ARCH="8.7"
 ENV CUDA_ARCH=${CUDA_ARCH}
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH}
 
-# 1. Установка Livox-SDK2 в систему
+# 1. Установка Livox-SDK2 в систему (/usr/local)
 RUN cd /tmp && \
     git clone https://github.com/Livox-SDK/Livox-SDK2.git && \
     cd Livox-SDK2 && mkdir build && cd build && \
-    cmake .. && make -j$(nproc) && make install && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    make -j$(nproc) && make install && \
     ldconfig && \
     rm -rf /tmp/Livox-SDK2
 
 WORKDIR /ros2_ws/src
 
-# 2. Клонирование FAST_LIO
+# 2. Клонирование FAST_LIO (ветка ROS2)
 RUN git clone --recursive -b ROS2 https://github.com/hku-mars/FAST_LIO.git || \
     git clone --recursive https://github.com/hku-mars/FAST_LIO.git
 
-# 3. Клонирование и переключение livox_ros_driver2 на ROS2
+# 3. Клонирование livox_ros_driver2 и исправление бага с CMake в ROS2 Humble
 RUN git clone https://github.com/Livox-SDK/livox_ros_driver2.git && \
     cd livox_ros_driver2 && \
-    cp package_ROS2.xml package.xml
+    cp package_ROS2.xml package.xml && \
+    sed -i 's/include_directories(\({LIVOX_INTERFACES_INCLUDE_DIRECTORIES})/# include_directories(\){LIVOX_INTERFACES_INCLUDE_DIRECTORIES})/g' CMakeLists.txt
 
 WORKDIR /ros2_ws
 
-# 4. Автоматическое определение и установка ВСЕХ зависимостей через rosdep
+# 4. Установка всех зависимостей через rosdep
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     apt-get update && \
     rosdep update && \
     rosdep install --from-paths src --ignore-src -r -y && \
     rm -rf /var/lib/apt/lists/*
 
-# 5. Сборка пакетов через colcon
+# 5. Сборка всего workspace через colcon
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
     colcon build --symlink-install \
     --cmake-args \
       -DCMAKE_BUILD_TYPE=Release \
       -DROS_EDITION=ROS2 \
+      -DCMAKE_PREFIX_PATH="/usr/local;/opt/ros/${ROS_DISTRO}" \
       -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCH}" \
       --no-warn-unused-cli
 
