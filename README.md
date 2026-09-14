@@ -123,8 +123,8 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o 
 RUN rosdep init || true && rosdep update
 
 ENV CUDA_HOME=/usr/local/cuda
-ENV PATH=@@INLINE_MATH_0@@{PATH}
-ENV LD_LIBRARY_PATH=@@INLINE_MATH_1@@{LD_LIBRARY_PATH}
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
 WORKDIR /ros2_ws
 CMD ["bash"]
